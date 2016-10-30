@@ -1,0 +1,126 @@
+{
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Description":"Template to deploy Lora Network, Gateway, and App Server in US East Virginia",
+   "Parameters":{
+      "InstanceName":{
+         "Type":"String",
+         "Description":"Instance identifier for EC2 Console",
+         "MinLength": "1",
+         "ConstraintDescription": "Provide an identifier for artifacts."
+      },
+      "HostedZone":{
+         "Type":"String",
+         "Default" : "lp-wan.io.",
+         "Description": "Provide Hosted Zone for DNS Record",
+         "AllowedValues": ["lp-wan.io.","lp-wan.com."]
+      },
+      "DomainName":{
+         "Type":"String",
+         "Description":"Provide Domain Name for server (this is appended to Hosted Zone)",
+         "MinLength": "1",
+         "ConstraintDescription": "Domain name must be provided."
+      },
+      "InstanceType":{
+         "Description":"EC2 Instance Type",
+         "Type":"String",
+         "Default":"t2.micro",
+         "AllowedValues":[
+            "t2.micro",
+            "t2.small"
+         ]
+      },
+      "KeyPair":{
+         "Type":"AWS::EC2::KeyPair::KeyName"
+      }
+   },
+   "Metadata" : {
+      "AWS::CloudFormation::Interface" : {
+        "ParameterGroups" : [
+          {
+            "Label" : { "default":"Instance Configuration" },
+            "Parameters" : [ "InstanceName","InstanceType", "KeyPair" ]
+          },
+          {
+            "Label" : { "default" : "DNS Configuration" },
+            "Parameters" : [ "HostedZone", "DomainName" ]
+          }
+        ],
+      	"ParameterLabels" : {
+      		"InstanceType" : { "default" : "Instance Type" },
+      		"InstanceName" : { "default" : "Instance Name" },
+      		"HostedZone" : { "default" : "Hosted Zone Name" },
+      		"DomainName" : { "default" : "Server DNS Name" }
+      	}
+      }
+    },
+    "Mappings" : {
+      "RegionMap" : {
+        "us-east-1" : { 
+          "role" : "loraserver-admin",
+          "vpcId" : "vpc-4b6dcc2c",
+          "subnet" : "subnet-e34a7495",
+          "securityGroup" : "sg-8c8c10f7",
+          "ami" : "ami-08111162"
+        }
+      }
+    },
+   "Resources":{
+     "ServerInstance" : {
+       "Type" : "AWS::EC2::Instance",
+       "Properties" : {
+         "InstanceType" : { "Ref" : "InstanceType"} ,
+         "IamInstanceProfile" : { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "role" ] },
+         "ImageId" : { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "ami" ] },
+         "KeyName" : { "Ref" : "KeyPair"} ,
+         "NetworkInterfaces": [ {
+              "AssociatePublicIpAddress": true,
+              "DeleteOnTermination": true,
+              "DeviceIndex": "0",
+              "SubnetId": { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "subnet" ] },
+              "GroupSet": [ { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "securityGroup" ] } ]
+          } ],
+        "InstanceInitiatedShutdownBehavior" : "stop",
+        "Tags": [ { "Key": "Name", "Value": { "Ref": "InstanceName" } } ]
+       }
+     },
+    "ServerDNSRecord" : {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+         "HostedZoneName" : { "Ref" : "HostedZone" },
+         "Comment" : "DNS name Lora Server Instance.",  
+         "Name" : { "Fn::Join" : [ ".", [ { "Ref" : "DomainName" }, { "Ref" : "HostedZone" } ] ] },
+         "Type" : "A",
+         "TTL" : "60",
+         "ResourceRecords" : [ { "Fn::GetAtt" : [ "ServerInstance", "PublicIp" ] } ]
+      }
+    }
+   },
+   "Outputs": {
+    "InstanceID" : {
+     "Description": "The EC2 Instance ID",
+     "Value" : { "Ref" : "ServerInstance" }
+  	},
+    "ServerDNS" : {
+      "Description": "Server DNS Name",
+      "Value": { "Fn::Join" : [ ".", [ { "Ref" : "DomainName" }, { "Ref" : "HostedZone" } ] ] }
+    },
+    "PublicIP": {
+      "Description": "Public IP address of the EC2 instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "ServerInstance",
+          "PublicIp"
+        ]
+      }
+    },
+    "AmazonPublicDNS": {
+      "Description": "Amazon DNS name of the EC2 instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "ServerInstance",
+          "PublicDnsName"
+        ]
+      }
+    }
+  }
+}
