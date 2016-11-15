@@ -1,6 +1,7 @@
 #!/bin/bash
 
 echo "Installing Postgres Database"
+cd /home/ec2-user
 sudo yum -y install postgresql95-server postgresql95-contrib
 sudo mkdir /opt/pgdata
 sudo chown postgres /opt/pgdata
