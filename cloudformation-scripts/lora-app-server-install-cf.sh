@@ -10,7 +10,7 @@ cp lora-install/lora-app-server /opt/lora-app-server/bin
 mkdir -p /opt/lora-app-server/certs
 chmod +rw /opt/lora-app-server/certs
 echo "Create Certificates for server"  >> /home/ec2-user/install.log
-openssl req -x509 -newkey rsa:4096 -keyout /opt/lora-app-server/certs/http-key.pem -out /opt/lora-app-server/certs/http.pem -days 365 -nodes
+openssl req -x509 -newkey rsa:4096 -keyout /opt/lora-app-server/certs/http-key.pem -out /opt/lora-app-server/certs/http.pem -days 365 -nodes -subj "/C=CA/ST=Ontario/L=Ottawa/O=Me/OU=Me/CN=localhost.localdomain"
 chmod +rw /opt/lora-app-server/certs/* 
 chown -R ec2-user /opt/lora-app-server/certs
 echo "Complete Create Certificates for server"  >> /home/ec2-user/install.log
