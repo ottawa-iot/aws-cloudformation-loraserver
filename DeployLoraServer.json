@@ -1,6 +1,6 @@
 {
    "AWSTemplateFormatVersion":"2010-09-09",
-   "Description":"Template to deploy Lora Network, Gateway, and App Server in US East Virginia",
+   "Description":"Template to deploy Lora Network, Gateway, and App Server in EC2",
    "Parameters":{
       "InstanceName":{
          "Type":"String",
@@ -31,6 +31,13 @@
       },
       "KeyPair":{
          "Type":"AWS::EC2::KeyPair::KeyName"
+      },
+      "Bucket":{
+         "Type":"String",
+         "Description":"S3 bucket with Install Artifacts",
+         "MinLength": "1",
+         "Default":"loraservers",
+         "ConstraintDescription": "Bucket must be provided."
       }
    },
    "Metadata" : {
@@ -38,7 +45,7 @@
         "ParameterGroups" : [
           {
             "Label" : { "default":"Instance Configuration" },
-            "Parameters" : [ "InstanceName","InstanceType", "KeyPair" ]
+            "Parameters" : [ "InstanceName","InstanceType", "KeyPair", "Bucket" ]
           },
           {
             "Label" : { "default" : "DNS Configuration" },
@@ -49,7 +56,8 @@
       		"InstanceType" : { "default" : "Instance Type" },
       		"InstanceName" : { "default" : "Instance Name" },
       		"HostedZone" : { "default" : "Hosted Zone Name" },
-      		"DomainName" : { "default" : "Server DNS Name" }
+      		"DomainName" : { "default" : "Server DNS Name" },
+      		"Bucket" : { "default" : "Install Artifacts" }
       	}
       }
     },
@@ -80,7 +88,32 @@
               "GroupSet": [ { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "securityGroup" ] } ]
           } ],
         "InstanceInitiatedShutdownBehavior" : "stop",
-        "Tags": [ { "Key": "Name", "Value": { "Ref": "InstanceName" } } ]
+        "Tags": [ { "Key": "Name", "Value": { "Ref": "InstanceName" } } ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash \n",
+                "cd /home/ec2-user \n",
+                "mkdir lora-install \n",
+                "bucket=", { "Ref" : "Bucket" }, "\n",
+                "echo 'Starting Lora Server Install' >> /home/ec2-user/install.log \n",
+                "echo \"Copy install artifacts from $bucket\" >> /home/ec2-user/install.log \n",
+                "aws s3 cp s3://$bucket lora-install --recursive \n",
+                "chmod +x lora-install/setup-scripts/*.sh \n",
+                "chmod +x lora-install/* \n",
+                "./lora-install/setup-scripts/postgres-install-cf.sh \n",
+                "./lora-install/setup-scripts/redis-install-cf.sh \n",
+                "./lora-install/setup-scripts/mosquitto-install-cf.sh \n",
+                "./lora-install/setup-scripts/lora-gateway-server-install-cf.sh \n",
+                "./lora-install/setup-scripts/lora-app-server-install-cf.sh \n",
+                "./lora-install/setup-scripts/lora-network-server-install-cf.sh \n",                
+                "echo 'Starting Lora Server Install' >> /home/ec2-user/install.log "
+              ]
+            ]
+          }
+        }
        }
      },
     "ServerDNSRecord" : {
