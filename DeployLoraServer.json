@@ -1,6 +1,6 @@
 {
    "AWSTemplateFormatVersion":"2010-09-09",
-   "Description":"Template to deploy Lora Network, Gateway, and App Server in EC2",
+   "Description":"Template to Deploy LoRa Network, Gateway, and App Server in EC2",
    "Parameters":{
       "InstanceName":{
          "Type":"String",
@@ -36,7 +36,7 @@
          "Type":"String",
          "Description":"S3 bucket with Install Artifacts",
          "MinLength": "1",
-         "Default":"loraservers",
+         "Default":"lora-artifacts",
          "ConstraintDescription": "Bucket must be provided."
       }
    },
@@ -57,7 +57,7 @@
       		"InstanceName" : { "default" : "Instance Name" },
       		"HostedZone" : { "default" : "Hosted Zone Name" },
       		"DomainName" : { "default" : "Server DNS Name" },
-      		"Bucket" : { "default" : "Install Artifacts" }
+      		"Bucket" : { "default" : "S3 Install Artifacts" }
       	}
       }
     },
@@ -69,6 +69,13 @@
           "subnet" : "subnet-e34a7495",
           "securityGroup" : "sg-8c8c10f7",
           "ami" : "ami-08111162"
+        },
+        "ca-central-1" : { 
+          "role" : "loraserver-admin",
+          "vpcId" : "vpc-647a8b0d",
+          "subnet" : "subnet-8653afef",
+          "securityGroup" : "sg-ef26de86",
+          "ami" : "ami-eb20928f"
         }
       }
     },
@@ -88,7 +95,10 @@
               "GroupSet": [ { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "securityGroup" ] } ]
           } ],
         "InstanceInitiatedShutdownBehavior" : "stop",
-        "Tags": [ { "Key": "Name", "Value": { "Ref": "InstanceName" } } ],
+        "Tags": [ 
+          { "Key": "Name", "Value": { "Fn::Join" : [ "-", [{ "Ref" : "AWS::StackName" }, { "Ref": "InstanceName" }]]} },
+          { "Key": "Application", "Value": "LoRa Network" }
+         ],
         "UserData": {
           "Fn::Base64": {
             "Fn::Join": [
@@ -100,7 +110,21 @@
                 "bucket=", { "Ref" : "Bucket" }, "\n",
                 "echo 'Starting Lora Server Install' >> /home/ec2-user/install.log \n",
                 "echo \"Copy install artifacts from $bucket\" >> /home/ec2-user/install.log \n",
-                "aws s3 cp s3://$bucket lora-install --recursive \n",
+                
+                "echo \"Download from s3://$bucket to lora-install\" >> /home/ec2-user/install.log \n",
+                "location=$(aws s3api get-bucket-location --bucket $bucket) \n",
+                "echo \"Region for bucket $bucket is $location\" >> /home/ec2-user/install.log \n",
+                "regionString=", { "Ref" : "AWS::Region" }, " \n",
+                "echo \"Region is ${regionString}\" >> /home/ec2-user/install.log \n",
+                "s3cmd=\"\" \n",
+                "if [ \"${regionString}\" == \"ca-central-1\" ]; then \n",
+                "    s3cmd=\"aws s3 cp s3://${bucket} lora-install --recursive --region ${regionString}\" \n",
+                "else \n",
+	              "    s3cmd=\"aws s3 cp s3://${bucket} lora-install --recursive\" \n",
+                "fi \n",
+                "echo \"Running command ${s3cmd}\"  >> /home/ec2-user/install.log \n",
+                "eval \"$s3cmd\" \n",
+                
                 "chmod +x lora-install/setup-scripts/*.sh \n",
                 "chmod +x lora-install/* \n",
                 "./lora-install/setup-scripts/postgres-install-cf.sh \n",
@@ -108,8 +132,15 @@
                 "./lora-install/setup-scripts/mosquitto-install-cf.sh \n",
                 "./lora-install/setup-scripts/lora-gateway-server-install-cf.sh \n",
                 "./lora-install/setup-scripts/lora-app-server-install-cf.sh \n",
-                "./lora-install/setup-scripts/lora-network-server-install-cf.sh \n",                
-                "echo 'Starting Lora Server Install' >> /home/ec2-user/install.log "
+                "./lora-install/setup-scripts/lora-network-server-install-cf.sh \n",   
+
+                "cname=", {"Ref" : "DomainName"}, "\n",
+                "zoneId=", {"Ref" : "HostedZone"}, "\n",
+                "cname=\"$cname.\"\n",
+                "echo \"Setting hostname to $cname$zoneId\" >> /home/ec2-user/install.log \n",
+                "hostname $cname$zoneId \n",
+
+                "echo 'Complete Lora Server Install' >> /home/ec2-user/install.log "
               ]
             ]
           }
@@ -120,7 +151,7 @@
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
          "HostedZoneName" : { "Ref" : "HostedZone" },
-         "Comment" : "DNS name Lora Server Instance.",  
+         "Comment" : "DNS record for LoRa Server Instance.",  
          "Name" : { "Fn::Join" : [ ".", [ { "Ref" : "DomainName" }, { "Ref" : "HostedZone" } ] ] },
          "Type" : "A",
          "TTL" : "60",
@@ -134,7 +165,7 @@
      "Value" : { "Ref" : "ServerInstance" }
   	},
     "ServerDNS" : {
-      "Description": "Server DNS Name",
+      "Description": "Server DNS Record",
       "Value": { "Fn::Join" : [ ".", [ { "Ref" : "DomainName" }, { "Ref" : "HostedZone" } ] ] }
     },
     "PublicIP": {
@@ -147,7 +178,7 @@
       }
     },
     "AmazonPublicDNS": {
-      "Description": "Amazon DNS name of the EC2 instance",
+      "Description": "Amazon DNS of the EC2 instance",
       "Value": {
         "Fn::GetAtt": [
           "ServerInstance",
